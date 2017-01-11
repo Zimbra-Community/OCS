@@ -80,7 +80,7 @@ public class OCS extends DocumentHandler {
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
 
                 conn.setDoOutput(true);
-                conn.setInstanceFollowRedirects(false);
+                conn.setInstanceFollowRedirects(true);
                 conn.setRequestMethod("POST");
                 conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
                 conn.setRequestProperty("charset", "utf-8");
