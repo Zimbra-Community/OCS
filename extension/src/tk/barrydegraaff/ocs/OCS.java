@@ -132,7 +132,7 @@ public class OCS extends DocumentHandler {
             }
             return response;
         } catch (Exception ex) {
-            response.addAttribute("createShare","{\"statuscode\":100,\"id\":0,\"message\":\"\",\"url\":\""+"Exception thrown: " + ex.toString()+"\",\"status\":\"ok\",\"token\":\"\"}");
+            response.addAttribute("createShare","{\"statuscode\":100,\"id\":0,\"message\":\"\",\"url\":\""+"Could not create share. " + "\",\"status\":\"ok\",\"token\":\"\"}");
             return response;
         }
     }
