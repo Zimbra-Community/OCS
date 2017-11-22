@@ -31,6 +31,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+
 import org.apache.commons.codec.binary.Base64;
 
 import java.util.Properties;
@@ -59,16 +60,14 @@ public class OCS extends DocumentHandler {
                     return (response);
             }
         } catch (
-                Exception e)
-        {
+                Exception e) {
             throw ServiceException.FAILURE("exception occurred handling command", e);
         }
     }
 
     private Element createShare(Element request, Element response) {
         try {
-            if (checkPermissionOnTarget(request.getAttribute("owncloud_zimlet_server_name")))
-            {
+            if (checkPermissionOnTarget(request.getAttribute("owncloud_zimlet_server_name"))) {
                 String urlParameters = "path=" + request.getAttribute("path") + "&shareType=" + request.getAttribute("shareType") + "&password=" + request.getAttribute("password");
 
                 byte[] credentials = Base64.encodeBase64((uriDecode(request.getAttribute("owncloud_zimlet_username")) + ":" + uriDecode(request.getAttribute("owncloud_zimlet_password"))).getBytes());
@@ -103,8 +102,8 @@ public class OCS extends DocumentHandler {
                     isError = true;
                 }
 
-                BufferedReader in= new BufferedReader(
-                              new InputStreamReader(_is));
+                BufferedReader in = new BufferedReader(
+                        new InputStreamReader(_is));
 
                 String inputLine;
                 StringBuffer responseTxt = new StringBuffer();
@@ -114,25 +113,83 @@ public class OCS extends DocumentHandler {
                 }
                 in.close();
 
-                final Pattern pattern;
-                if(isError) {
+                Pattern pattern;
+                if (isError) {
                     pattern = Pattern.compile("<message>(.+?)</message>");
-                }
-                else {
+                } else {
                     pattern = Pattern.compile("<url>(.+?)</url>");
                 }
-                final Matcher matcher = pattern.matcher(responseTxt.toString());
+                Matcher matcher = pattern.matcher(responseTxt.toString());
                 matcher.find();
+                final String result = matcher.group(1);
 
-                response.addAttribute("createShare","{\"statuscode\":100,\"id\":0,\"message\":\"\",\"url\":\""+matcher.group(1)+"\",\"status\":\"ok\",\"token\":\"\"}");
-            }
-            else
-            {
-                response.addAttribute("createShare","{\"statuscode\":100,\"id\":0,\"message\":\"\",\"url\":\""+"Host not allowed: " + request.getAttribute("owncloud_zimlet_server_name")+"\",\"status\":\"ok\",\"token\":\"\"}");
+                if (!isError) {
+                    pattern = Pattern.compile("<id>(.+?)</id>");
+                }
+                matcher = pattern.matcher(responseTxt.toString());
+                matcher.find();
+                final String id = matcher.group(1);
+
+                //Implement Expiry date, in the future, add this to a loop so we can update more share properties as defined in
+                //https://docs.nextcloud.com/server/12/developer_manual/core/ocs-share-api.html#update-share
+                try {
+                    if (request.getAttribute("expiry_date").length() == 10) {
+                        urlParameters = "expireDate="+request.getAttribute("expiry_date");
+
+                        postData = urlParameters.getBytes(StandardCharsets.UTF_8);
+                        postDataLength = postData.length;
+
+                        requestUrl = request.getAttribute("owncloud_zimlet_server_name") + ":" + request.getAttribute("owncloud_zimlet_server_port") + request.getAttribute("owncloud_zimlet_oc_folder") + "/ocs/v1.php/apps/files_sharing/api/v1/shares"+ "/" + id;
+
+                        url = new URL(requestUrl);
+                        conn = (HttpURLConnection) url.openConnection();
+
+                        conn.setDoOutput(true);
+                        conn.setInstanceFollowRedirects(true);
+                        conn.setRequestMethod("PUT");
+                        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                        conn.setRequestProperty("charset", "utf-8");
+                        conn.setRequestProperty("Content-Length", Integer.toString(postDataLength));
+                        conn.setRequestProperty("OCS-APIRequest", "true");
+                        conn.setRequestProperty("Authorization", "Basic " + new String(credentials));
+                        conn.setUseCaches(false);
+
+                        try (DataOutputStream wr = new DataOutputStream(conn.getOutputStream())) {
+                            wr.write(postData);
+                        }
+
+                        isError = false;
+                        if (conn.getResponseCode() < 400) {
+                            _is = conn.getInputStream();
+                            isError = false;
+                        } else {
+                            _is = conn.getErrorStream();
+                            isError = true;
+                        }
+
+                        in = new BufferedReader(
+                                new InputStreamReader(_is));
+
+                        responseTxt = new StringBuffer();
+
+                        while ((inputLine = in.readLine()) != null) {
+                            responseTxt.append(inputLine);
+                        }
+                        in.close();
+                        //to-do deal with the response, and errors.
+
+                    }
+                } catch (Exception e) {
+                    //ignore
+                }
+
+                response.addAttribute("createShare", "{\"statuscode\":100,\"id\":\"" + id + "\",\"message\":\"\",\"url\":\"" + result + "\",\"status\":\"ok\",\"token\":\"\"}");
+            } else {
+                response.addAttribute("createShare", "{\"statuscode\":100,\"id\":0,\"message\":\"\",\"url\":\"" + "Host not allowed: " + request.getAttribute("owncloud_zimlet_server_name") + "\",\"status\":\"ok\",\"token\":\"\"}");
             }
             return response;
         } catch (Exception ex) {
-            response.addAttribute("createShare","{\"statuscode\":100,\"id\":0,\"message\":\"\",\"url\":\""+"Could not create share. " + "\",\"status\":\"ok\",\"token\":\"\"}");
+            response.addAttribute("createShare", "{\"statuscode\":100,\"id\":0,\"message\":\"\",\"url\":\"" + "Could not create share. " + "\",\"status\":\"ok\",\"token\":\"\"}");
             return response;
         }
     }
@@ -141,19 +198,15 @@ public class OCS extends DocumentHandler {
         try {
             String clean = java.net.URLDecoder.decode(dirty, "UTF-8");
             return clean;
-        } catch(Exception ex) {
-        return ex.toString();
+        } catch (Exception ex) {
+            return ex.toString();
         }
     }
 
-    private boolean isNumeric(String str)
-    {
-        try
-        {
+    private boolean isNumeric(String str) {
+        try {
             double d = Double.parseDouble(str);
-        }
-        catch(NumberFormatException nfe)
-        {
+        } catch (NumberFormatException nfe) {
             return false;
         }
         return true;
