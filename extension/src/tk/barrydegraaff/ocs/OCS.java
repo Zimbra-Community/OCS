@@ -68,7 +68,7 @@ public class OCS extends DocumentHandler {
     private Element createShare(Element request, Element response) {
         try {
             if (checkPermissionOnTarget(request.getAttribute("owncloud_zimlet_server_name"))) {
-                String urlParameters = "path=" + request.getAttribute("path") + "&shareType=" + request.getAttribute("shareType") + "&password=" + request.getAttribute("password");
+                final String urlParameters = "path=" + request.getAttribute("path") + "&shareType=" + request.getAttribute("shareType") + "&password=" + request.getAttribute("password");
 
                 byte[] credentials = Base64.encodeBase64((uriDecode(request.getAttribute("owncloud_zimlet_username")) + ":" + uriDecode(request.getAttribute("owncloud_zimlet_password"))).getBytes());
                 byte[] postData = urlParameters.getBytes(StandardCharsets.UTF_8);
@@ -130,16 +130,17 @@ public class OCS extends DocumentHandler {
                 matcher.find();
                 final String id = matcher.group(1);
 
-                //Implement Expiry date, in the future, add this to a loop so we can update more share properties as defined in
+                //Implement Expiry date and update Password
+                //And empty password or expiryDate will remove the property from the share
                 //https://docs.nextcloud.com/server/12/developer_manual/core/ocs-share-api.html#update-share
+                String errorMessage = "";
                 try {
-                    if (request.getAttribute("expiry_date").length() == 10) {
-                        urlParameters = "expireDate="+request.getAttribute("expiry_date");
 
-                        postData = urlParameters.getBytes(StandardCharsets.UTF_8);
+                    final String[] updateArguments = {"expireDate=" + request.getAttribute("expiryDate"), "password=" + request.getAttribute("password")};
+                    for (String urlParameter : updateArguments) {
+                        postData = urlParameter.getBytes(StandardCharsets.UTF_8);
                         postDataLength = postData.length;
-
-                        requestUrl = request.getAttribute("owncloud_zimlet_server_name") + ":" + request.getAttribute("owncloud_zimlet_server_port") + request.getAttribute("owncloud_zimlet_oc_folder") + "/ocs/v1.php/apps/files_sharing/api/v1/shares"+ "/" + id;
+                        requestUrl = request.getAttribute("owncloud_zimlet_server_name") + ":" + request.getAttribute("owncloud_zimlet_server_port") + request.getAttribute("owncloud_zimlet_oc_folder") + "/ocs/v1.php/apps/files_sharing/api/v1/shares" + "/" + id;
 
                         url = new URL(requestUrl);
                         conn = (HttpURLConnection) url.openConnection();
@@ -176,22 +177,50 @@ public class OCS extends DocumentHandler {
                             responseTxt.append(inputLine);
                         }
                         in.close();
-                        //to-do deal with the response, and errors.
-
+                        if (!isError) {
+                            pattern = Pattern.compile("<message>(.+?)</message>");
+                            matcher = pattern.matcher(responseTxt.toString());
+                            matcher.find();
+                            if (!"OK".equals(matcher.group(1))) {
+                                errorMessage += matcher.group(1) + ". ";
+                            }
+                        }
                     }
                 } catch (Exception e) {
-                    //ignore
+                    errorMessage += e.toString();
                 }
 
-                response.addAttribute("createShare", "{\"statuscode\":100,\"id\":\"" + id + "\",\"message\":\"\",\"url\":\"" + result + "\",\"status\":\"ok\",\"token\":\"\"}");
+                /*The result variable holds the result from the `Create Share` request. If it starts with http it means the request was OK,
+                otherwise it will hold the error message.
+
+                Not all share properties can be set with `Create Share` and creating a share on an object that is already shared, will not
+                give an error, but does not do anything.
+
+                Therefore we always do 2 `Update Share` requests as well, to set/remove the password and expiry date.
+
+                The errorMessage variable holds the result from the Update Share` requests, in case it is empty, it means all went OK
+                and the result from `Create Share` can be trusted. Otherwise it holds concatenated error messages, that should be displayed
+                to the user. The link share url would not be reliable in this case.
+                 */
+                if ("".equals(errorMessage)) {
+                    response.addAttribute("createShare", "{\"statuscode\":100,\"id\":\"" + id + "\",\"message\":\"\",\"url\":\"" + result + "\",\"status\":\"ok\",\"token\":\"\"}");
+                } else {
+                    //result holds the url of the created share, if all went well, or also an error message if the sharing failed
+                    response.addAttribute("createShare", "{\"statuscode\":100,\"id\":\"" + id + "\",\"message\":\"\",\"url\":\"" + errorMessage + "\",\"status\":\"ok\",\"token\":\"\"}");
+                }
+
             } else {
                 response.addAttribute("createShare", "{\"statuscode\":100,\"id\":0,\"message\":\"\",\"url\":\"" + "Host not allowed: " + request.getAttribute("owncloud_zimlet_server_name") + "\",\"status\":\"ok\",\"token\":\"\"}");
             }
             return response;
-        } catch (Exception ex) {
+        } catch (
+                Exception ex)
+
+        {
             response.addAttribute("createShare", "{\"statuscode\":100,\"id\":0,\"message\":\"\",\"url\":\"" + "Could not create share. " + "\",\"status\":\"ok\",\"token\":\"\"}");
             return response;
         }
+
     }
 
     private String uriDecode(String dirty) {
