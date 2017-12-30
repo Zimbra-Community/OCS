@@ -178,11 +178,16 @@ public class OCS extends DocumentHandler {
                         }
                         in.close();
                         if (!isError) {
-                            pattern = Pattern.compile("<message>(.+?)</message>");
-                            matcher = pattern.matcher(responseTxt.toString());
-                            matcher.find();
-                            if (!"OK".equals(matcher.group(1))) {
-                                errorMessage += matcher.group(1) + ". ";
+                            try {
+                                pattern = Pattern.compile("<message>(.+?)</message>");
+                                matcher = pattern.matcher(responseTxt.toString());
+                                matcher.find();
+                                if (!"OK".equals(matcher.group(1))) {
+                                    errorMessage += matcher.group(1) + ". ";
+                                }
+                            }
+                            catch (Exception e) {
+                               //ignore https://github.com/Zimbra-Community/owncloud-zimlet/issues/148
                             }
                         }
                     }
