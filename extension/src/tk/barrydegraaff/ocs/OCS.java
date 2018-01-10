@@ -55,7 +55,7 @@ public class OCS extends DocumentHandler {
             );
             switch (request.getAttribute("action")) {
                 case "createShare":
-                    return createShare(request, response);
+                    return createShare(request, response, zsc);
                 default:
                     return (response);
             }
@@ -65,7 +65,7 @@ public class OCS extends DocumentHandler {
         }
     }
 
-    private Element createShare(Element request, Element response) {
+    private Element createShare(Element request, Element response, ZimbraSoapContext zsc) {
         try {
             if (checkPermissionOnTarget(request.getAttribute("owncloud_zimlet_server_name"))) {
                 final String urlParameters = "path=" + request.getAttribute("path") + "&shareType=" + request.getAttribute("shareType") + "&password=" + request.getAttribute("password");
@@ -85,6 +85,7 @@ public class OCS extends DocumentHandler {
                 conn.setRequestProperty("charset", "utf-8");
                 conn.setRequestProperty("Content-Length", Integer.toString(postDataLength));
                 conn.setRequestProperty("OCS-APIRequest", "true");
+                conn.setRequestProperty("X-Forwarded-For", zsc.getRequestIP());
                 conn.setRequestProperty("Authorization", "Basic " + new String(credentials));
                 conn.setUseCaches(false);
 
@@ -152,6 +153,7 @@ public class OCS extends DocumentHandler {
                         conn.setRequestProperty("charset", "utf-8");
                         conn.setRequestProperty("Content-Length", Integer.toString(postDataLength));
                         conn.setRequestProperty("OCS-APIRequest", "true");
+                        conn.setRequestProperty("X-Forwarded-For", zsc.getRequestIP());
                         conn.setRequestProperty("Authorization", "Basic " + new String(credentials));
                         conn.setUseCaches(false);
 
